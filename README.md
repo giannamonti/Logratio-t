@@ -28,3 +28,13 @@ You can install all dependencies with this command:
 install.packages(c("compositions", "robCompositions", "robustbase", "fitHeavyTail", 
                    "MASS", "caret", "pROC", "ggplot2", 
                    "StatDA", "ContaminatedMixt", "dplyr", "tidyr"))
+```                  
+                   
+## 📂 Repository Structure
+
+* `Kola_outliers.R`: Full-scale outlier detection using a consensus of 6 robust methods (Tables 2-3).
+* `Kola_Pollution.R`: Detailed analysis of the Co-Cu-Ni subset and PCA/Biplot visualizations (Figures 3-4).
+* `utils.R`: Helper functions, including custom confidence ellipse calculations for the Student-t distribution.                   
+                   
+                   
+                   

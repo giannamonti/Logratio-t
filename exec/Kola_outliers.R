@@ -7,6 +7,7 @@ library(pROC)
 library(ggplot2)
 library(patchwork)
 library(ggVennDiagram)
+library(StatDA)
 
 ## ---- Load data ----
 data(chorizon) # StatDA package
