@@ -1,17 +1,4 @@
-###############################################################
-# Supporting Information for:
-# "The logratio Student’s t distribution: 
-#  a robust model for compositional data analysis"
-# Author: Gianna Monti
-# This script reproduces the compositional data analysis 
-# and results reported in the manuscript (Tables 2-3, Figures 3–4).
-#
-# Required packages:
-# robCompositions, compositions, MASS, mvtnorm, fitHeavyTail,
-# mnormt, StatDA, Rfast, ConfidenceEllipse, caret
-#
 # Reproducibility: set a fixed random seed
-###############################################################
 
 set.seed(123)
 
