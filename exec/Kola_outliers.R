@@ -14,13 +14,13 @@ Kola <- chorizon[, c("Co", "Cu", "Ni", "Mg", "Na", "S",
                      "As", "Bi", "Cd", "Sb", "Ag", "Pb")]
 dim(Kola)
 
-# --- 1. Inizializzazione ---
+# --- 1. Initialization ---
 Xcoord <- ilr(Kola)
 N <- nrow(Xcoord)
 d <- ncol(Xcoord)
 n_df <- N - 1
 
-# Vettori per memorizzare le distanze LOO
+# Vectors to store Leave-One-Out (LOO) distances
 d2_loo_norm <- numeric(N)
 d2_loo_t    <- numeric(N)
 atyp_pvals  <- numeric(N)
@@ -30,26 +30,26 @@ for (i in 1:N) {
   X_menoi <- as.matrix(Xcoord[-i, ])
   z <- Xcoord[i, , drop = FALSE]
   
-  # A. Normale LOO (per Atypicality Index e Distanza Normale LOO)
+  # A. Normal LOO (for Atypicality Index and Normal LOO Distance)
   fit_norm_i <- mvnorm.mle(X_menoi)
   mu_n <- fit_norm_i$mu
   sig_n <- fit_norm_i$sigma
   
-  # Distanza per Atypicality (formula qy)
+  # Distance for Atypicality (qy formula)
   qy <- (1/(1 + 1/N)) * mahalanobis(z, mu_n, sig_n)
   atyp_pvals[i] <- pbeta(qy / (qy + n_df), d/2, (n_df - d + 1)/2)
   
-  # Distanza per Conf. Matrix Normale LOO
+  # Distance for Normal LOO Confusion Matrix
   d2_loo_norm[i] <- mahalanobis(z, mu_n, sig_n)
   
   # B. Student-t LOO
   fit_t_i <- fit_mvt(X_menoi, nu = "iterative", nu_iterative_method = "ECM")
   d2_loo_t[i] <- mahalanobis(z, fit_t_i$mu, fit_t_i$scatter)
   
-  if(i %% 100 == 0) cat("Punto", i, "di", N, "\n")
+  if(i %% 100 == 0) cat("Point", i, "of", N, "\n")
 }
 
-# --- 2. Metodi Robusti (Full Sample - Non serve LOO qui) ---
+# --- 2. Robust Methods (Full Sample - LOO not required here) ---
 mcd_res    <- covMcd(Xcoord)
 mcd_scores <- mcd_res$mah
 
@@ -60,9 +60,9 @@ fit_cn <- ContaminatedMixt::CNmixt(Xcoord, G = 1, contamination = TRUE, model = 
 pred_cn <- factor(ifelse(as.numeric(fit_cn$models[[1]]$v) < 0.5, "Atypical", "Normal"))
 
 
-# --- 3. Predizioni e Soglie ---
+# --- 3. Predictions and Thresholds ---
 
-# Soglia T (usiamo quello del modello Full per coerenza)
+# T threshold (using the Full model for consistency)
 final_t_fit <- fit_mvt(Xcoord, nu = "iterative", nu_iterative_method = "ECM")
 gdl_t <- final_t_fit$nu
 thresh_t <- d * qf(0.95, d, gdl_t)
@@ -70,11 +70,11 @@ t_scores <- mahalanobis(Xcoord, final_t_fit$mu, final_t_fit$scatter)
 
 
 nu_loo_values <- numeric(N)
-# Eseguiamo un ciclo veloce solo per estrarre nu (senza ricalcolare tutto)
-message("Estrazione valori nu via LOO...")
+# Fast loop to extract nu (without recalculating everything)
+message("Extracting nu values via LOO...")
 for (i in 1:N) {
   X_menoi <- as.matrix(Xcoord[-i, ])
-  # Usiamo un'estrazione veloce del parametro nu
+  # Fast extraction of the nu parameter
   fit_i <- fit_mvt(X_menoi, nu = "iterative", nu_iterative_method = "ECM")
   nu_loo_values[i] <- fit_i$nu
 }
@@ -97,11 +97,11 @@ preds <- data.frame(
 )
 
 
-# --- 4. Verifica e Consenso ---
-print("Conteggio Outlier (Con T-LOO ricalcolato):")
+# --- 4. Validation and Consensus ---
+print("Outlier Count (With recalculated T-LOO):")
 print(colSums(preds[,-1] == "Atypical"))
 
-# Outlier Forti (Unanimità tra T_LOO, MCD, CN, COMCoDa, Norm e Atypicality)
+# Strong Outliers (Unanimity among T_LOO, MCD, CN, COMCoDa, Norm, and Atypicality)
 strong_idx <- which(preds$T_LOO == "Atypical" & 
                       preds$MCD == "Atypical" & 
                       preds$CN == "Atypical" &
@@ -109,9 +109,9 @@ strong_idx <- which(preds$T_LOO == "Atypical" &
                       preds$Atypicality == "Atypical" & 
                       preds$Norm_LOO == "Atypical")
 
-cat("Outlier identificati all'unanimità (incluso T-LOO):", length(strong_idx), "\n")
+cat("Outliers identified by consensus (including T-LOO):", length(strong_idx), "\n")
 
-# --- 2. Sintesi Risultati ---
+# --- 2. Results Summary ---
 
 results_df <- data.frame(
   ID = 1:N,
@@ -123,7 +123,7 @@ results_df <- data.frame(
   Norm =  preds$Norm_LOO
 )
 
-print("Conteggio Outlier Identificati:")
+print("Count of Identified Outliers:")
 print(colSums(results_df[, -1] == "Atypical", na.rm = TRUE))
 
 
@@ -137,43 +137,43 @@ outlier_lists <- list(
   Norm = which(results_df$Norm == "Atypical")
 )
 
-# Trova gli indici dei campioni identificati come 'Atypical' da TUTTI i 5 metodi
-# Usiamo Reduce con intersect per trovare l'intersezione comune a tutta la lista
+# Find indices of samples identified as 'Atypical' by ALL methods
+# Using Reduce with intersect to find the common intersection across the list
 strong_outlier_indices <- Reduce(intersect, outlier_lists)
 
-# Creiamo un dataframe con solo questi campioni estremi
+# Create a dataframe with only these extreme samples
 strong_outliers_data <- results_df[strong_outlier_indices, ]
 
-cat("--- ANALISI OUTLIER ESTREMI ---\n")
-cat("Numero di campioni identificati all'unanimità:", length(strong_outlier_indices), "\n")
-cat("Percentuale sul totale:", round(length(strong_outlier_indices)/N*100, 2), "%\n")
+cat("--- EXTREME OUTLIER ANALYSIS ---\n")
+cat("Number of samples identified by total consensus:", length(strong_outlier_indices), "\n")
+cat("Percentage of total:", round(length(strong_outlier_indices)/N*100, 2), "%\n")
 
-# Visualizza i primi indici
+# Display the first indices
 print(strong_outlier_indices)
 
 
 
 
-### cerchiamo di capire la natura di questi outliers
-# 1. Identifichiamo i 42 outlier "Strong"
+### Investigating the nature of these outliers
+# 1. Identify the "Strong" outliers
 strong_idx <- Reduce(intersect, outlier_lists)
 
-# 2. Creiamo un fattore nel dataset originale per il confronto
-# Nota: usa il dataset originale 'Kola' (non trasformato ilr) per l'interpretazione chimica
+# 2. Create a factor in the original dataset for comparison
+# Note: uses original 'Kola' dataset (non-ilr transformed) for chemical interpretation
 Kola_analysis <- Kola
 Kola_analysis$Type <- "Typical"
 Kola_analysis$Type[strong_idx] <- "Strong Outlier"
 
-# 3. Calcoliamo le medie geometriche (o mediane) per gruppo
-# In geochimica la mediana è più robusta per i confronti
+# 3. Calculate geometric means (or medians) per group
+# In geochemistry, the median is more robust for comparisons
 library(dplyr)
 
-# Funzione per la media geometrica (gestisce eventuali zeri con un piccolo epsilon se necessario)
+# Geometric mean function (handles zeros with a small epsilon if necessary)
 geom_mean <- function(x) {
   exp(mean(log(x[x > 0]), na.rm = TRUE))
 }
 
-# Calcolo della tabella comparativa
+# Calculation of the comparative table
 comp_table_refined <- Kola_analysis %>%
   group_by(Type) %>%
   summarise(across(where(is.numeric), 
@@ -186,12 +186,12 @@ comp_table_refined <- Kola_analysis %>%
   mutate(Ratio = `Strong Outlier` / Typical) %>%
   arrange(Stat, desc(Ratio))
 
-# Visualizziamo solo i risultati della Media Geometrica per gli elementi top
-print("Elementi più arricchiti (Media Geometrica):")
+# Display Geometric Mean results for top elements
+print("Most enriched elements (Geometric Mean):")
 comp_table_refined %>% 
   filter(Stat == "GMean") %>% 
   head(10) %>% 
   print()
 
-print("Elementi più arricchiti negli outlier unanimi:")
+print("Top enriched elements in consensus outliers:")
 print(head(comp_table_refined, 10))
