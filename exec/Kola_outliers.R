@@ -82,10 +82,6 @@ for (i in 1:N) {
 
 mean(nu_loo_values)
 
-final_norm_fit <- mvnorm.mle(as.matrix(Xcoord))
-norm_scores <- mahalanobis(Xcoord, center = final_norm_fit$mu, 
-                           cov = final_norm_fit$sigma)
-
 
 preds <- data.frame(
   ID = 1:N,
@@ -165,7 +161,7 @@ Kola_analysis <- Kola
 Kola_analysis$Type <- "Typical"
 Kola_analysis$Type[strong_idx] <- "Strong Outlier"
 
-# 3. Calculate geometric means (or medians) per group
+# 3. Calculate geometric means per group
 # In geochemistry, the median is more robust for comparisons
 library(dplyr)
 

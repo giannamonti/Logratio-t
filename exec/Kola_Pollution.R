@@ -2,7 +2,7 @@
 
 set.seed(123)
 
-source("utils.R")
+source("exec/utils.R")
 
 ## ---- Load packages ----
 library(robCompositions)
@@ -77,7 +77,7 @@ AIC.normal.alr <- 2 * p - 2 * sum(loglik.alr)
 
 
 ## ---- Figure 3: Pollution subset ----
-pdf("Figure3_Kola.pdf", height = 5, width = 9)
+# pdf("Figure3_Kola.pdf", height = 5, width = 9)
 par(mfrow = c(1, 2))
 
 plot(acomp(Pollution), pch = 4, cex = 0.5, col = "grey60")
@@ -99,7 +99,7 @@ lines(ellipse_99$x, ellipse_99$y, col = 2, lwd = 2)
 lines(ellipse_50_t[, 1], ellipse_50_t[, 2], col = 4, lwd = 2)
 lines(ellipse_95_t[, 1], ellipse_95_t[, 2], col = 4, lwd = 2)
 lines(ellipse_99_t[, 1], ellipse_99_t[, 2], col = 4, lwd = 2)
-dev.off()
+# dev.off()
 
 ###############################################################
 # SECTION 2. Whole composition
@@ -152,7 +152,7 @@ ellipse_95_t <- confidence_ellipse_GM(Xcoord, x = x, y = y, conf_level = 0.95, g
 ellipse_50_t <- confidence_ellipse_GM(Xcoord, x = x, y = y, conf_level = 0.50, gdl = gdl)
 
 
-pdf("Figure4_Kola_biplot_clear.pdf", height = 7, width = 7)
+# pdf("Figure4_Kola_biplot_clear.pdf", height = 7, width = 7)
 par(pty = "s", mar = c(5, 5, 4, 4))
 
 plot(Xcoord, cex = .5, col = "grey60", pch = 19,
@@ -176,6 +176,6 @@ text(pca$rotation[, 1] * label_factor,
      col = "darkred", 
      cex = 0.9, 
      font = 2)
-dev.off()
+# dev.off()
 
 
