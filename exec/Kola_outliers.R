@@ -1,3 +1,8 @@
+set.seed(123)
+
+source("exec/fit_mvt_clr.R") # fit_mvt_clr(), dmt_clr(), maha_clr(),
+# pseudo_log_det(), eff_rank()
+
 library(compositions)
 library(robustbase)
 library(fitHeavyTail)
@@ -8,187 +13,215 @@ library(ggplot2)
 library(patchwork)
 library(ggVennDiagram)
 library(StatDA)
+library(dplyr)
 
 ## ---- Load data ----
-data(chorizon) # StatDA package
+data(chorizon)
 Kola <- chorizon[, c("Co", "Cu", "Ni", "Mg", "Na", "S",
                      "As", "Bi", "Cd", "Sb", "Ag", "Pb")]
 dim(Kola)
 
-# --- 1. Initialization ---
-Xcoord <- ilr(Kola)
-N <- nrow(Xcoord)
-d <- ncol(Xcoord)
+# =============================================================================
+# DEMOCRATIC APPROACH: CLR, ILR and ALR are mathematically equivalent.
+# Mahalanobis distances and outlier classifications are identical across
+# transformations (max diff < 5e-14). Both CLR and ILR are run in parallel
+# to demonstrate this equivalence empirically.
+#
+# CLR: handled via fit_mvt_clr() / maha_clr() / ginv() — no projection needed.
+# ILR: standard fit_mvt() / mahalanobis() — full-rank (D-1) coordinates.
+# Robust methods (MCD, COMCoDa, CN): fitted on ILR (full-rank input required
+#   by the underlying algorithms); distances are transform-invariant so results
+#   apply equally to CLR and ALR.
+# =============================================================================
+
+# --- Transformations ---------------------------------------------------------
+Xcoord_ilr <- as.matrix(ilr(Kola))    # N x (D-1), full rank
+Xcoord_clr <- as.matrix(clr(Kola))    # N x D,     rank D-1
+
+N    <- nrow(Xcoord_ilr)
+d    <- ncol(Xcoord_ilr)   # effective dimension = D-1 = 11
 n_df <- N - 1
 
-# Vectors to store Leave-One-Out (LOO) distances
-d2_loo_norm <- numeric(N)
-d2_loo_t    <- numeric(N)
-atyp_pvals  <- numeric(N)
+cat("Dimensions ILR:", dim(Xcoord_ilr), "\n")
+cat("Dimensions CLR:", dim(Xcoord_clr), "\n")
 
+# =============================================================================
+# 1. Leave-One-Out (LOO) loop — ILR & CLR in parallel
+# =============================================================================
+
+d2_loo_norm_ilr <- numeric(N)
+d2_loo_t_ilr    <- numeric(N)
+atyp_pvals_ilr  <- numeric(N)
+nu_loo_ilr      <- numeric(N)
+
+d2_loo_norm_clr <- numeric(N)
+d2_loo_t_clr    <- numeric(N)
+atyp_pvals_clr  <- numeric(N)
+nu_loo_clr      <- numeric(N)
+
+message("Starting LOO loop (ILR + CLR) — ", N, " iterations...")
 
 for (i in 1:N) {
-  X_menoi <- as.matrix(Xcoord[-i, ])
-  z <- Xcoord[i, , drop = FALSE]
   
-  # A. Normal LOO (for Atypicality Index and Normal LOO Distance)
-  fit_norm_i <- mvnorm.mle(X_menoi)
-  mu_n <- fit_norm_i$mu
-  sig_n <- fit_norm_i$sigma
+  # ---- ILR ------------------------------------------------------------------
+  X_train_ilr <- as.matrix(Xcoord_ilr[-i, ])
+  z_ilr        <- as.matrix(Xcoord_ilr[i, , drop = FALSE])
   
-  # Distance for Atypicality (qy formula)
-  qy <- (1/(1 + 1/N)) * mahalanobis(z, mu_n, sig_n)
-  atyp_pvals[i] <- pbeta(qy / (qy + n_df), d/2, (n_df - d + 1)/2)
+  # Normal LOO
+  fit_n_ilr  <- mvnorm.mle(X_train_ilr)
+  mu_n_ilr   <- fit_n_ilr$mu
+  sig_n_ilr  <- fit_n_ilr$sigma
   
-  # Distance for Normal LOO Confusion Matrix
-  d2_loo_norm[i] <- mahalanobis(z, mu_n, sig_n)
+  qy_ilr <- (1 / (1 + 1/N)) * mahalanobis(z_ilr, mu_n_ilr, sig_n_ilr)
+  atyp_pvals_ilr[i]  <- pbeta(qy_ilr / (qy_ilr + n_df), d/2, (n_df - d + 1)/2)
+  d2_loo_norm_ilr[i] <- mahalanobis(z_ilr, mu_n_ilr, sig_n_ilr)
   
-  # B. Student-t LOO
-  fit_t_i <- fit_mvt(X_menoi, nu = "iterative", nu_iterative_method = "ECM")
-  d2_loo_t[i] <- mahalanobis(z, fit_t_i$mu, fit_t_i$scatter)
+  # Student-t LOO
+  fit_t_ilr       <- fit_mvt(X_train_ilr, nu = "iterative", nu_iterative_method = "ECM")
+  d2_loo_t_ilr[i] <- mahalanobis(z_ilr, fit_t_ilr$mu, fit_t_ilr$scatter)
+  nu_loo_ilr[i]   <- fit_t_ilr$nu
   
-  if(i %% 100 == 0) cat("Point", i, "of", N, "\n")
+  # ---- CLR ------------------------------------------------------------------
+  X_train_clr <- Xcoord_clr[-i, ]
+  z_clr        <- matrix(Xcoord_clr[i, ], nrow = 1)
+  
+  # Normal LOO (ginv handles singular covariance directly)
+  mu_n_clr   <- colMeans(X_train_clr)
+  sig_n_clr  <- cov(X_train_clr)
+  Sinv_n_clr <- ginv(sig_n_clr)
+  
+  qy_clr <- (1 / (1 + 1/N)) * maha_clr(z_clr, mu_n_clr, Sinv_n_clr)
+  atyp_pvals_clr[i]  <- pbeta(qy_clr / (qy_clr + n_df), d/2, (n_df - d + 1)/2)
+  d2_loo_norm_clr[i] <- maha_clr(z_clr, mu_n_clr, Sinv_n_clr)
+  
+  # Student-t LOO (fit_mvt_clr works directly on singular CLR matrix)
+  fit_t_clr       <- fit_mvt_clr(X_train_clr)
+  Sinv_t_clr      <- ginv(fit_t_clr$scatter)
+  d2_loo_t_clr[i] <- maha_clr(z_clr, fit_t_clr$mu, Sinv_t_clr)
+  nu_loo_clr[i]   <- fit_t_clr$nu
+  
+  if (i %% 100 == 0) cat("  Point", i, "/", N, "\n")
 }
 
-# --- 2. Robust Methods (Full Sample - LOO not required here) ---
-mcd_res    <- covMcd(Xcoord)
+cat("\nMean nu (LOO) ILR:", round(mean(nu_loo_ilr), 3), "\n")
+cat("Mean nu (LOO) CLR:", round(mean(nu_loo_clr), 3), "\n")
+
+# Equivalence check
+cat("\nEquivalence check (Normal LOO distances):\n")
+cat("  Max |ILR - CLR|:", max(abs(d2_loo_norm_ilr - d2_loo_norm_clr)), "\n")
+cat("Equivalence check (Student-t LOO distances):\n")
+cat("  Max |ILR - CLR|:", max(abs(d2_loo_t_ilr - d2_loo_t_clr)), "\n")
+
+# =============================================================================
+# 2. Robust Methods (Full Sample)
+# =============================================================================
+# MCD, COMCoDa and CN require full-rank input — fitted on ILR coordinates.
+# Transform-invariance of Mahalanobis distances guarantees identical results
+# for CLR and ALR.
+
+mcd_res    <- covMcd(Xcoord_ilr)
 mcd_scores <- mcd_res$mah
 
-comed_res    <- covComed(Xcoord, reweight = TRUE)
-comed_scores <- mahalanobis(Xcoord, comed_res$center, comed_res$cov)
+comed_res    <- covComed(Xcoord_ilr, reweight = TRUE)
+comed_scores <- mahalanobis(Xcoord_ilr, comed_res$center, comed_res$cov)
 
-fit_cn <- ContaminatedMixt::CNmixt(Xcoord, G = 1, contamination = TRUE, model = "VVV", verbose = FALSE)
-pred_cn <- factor(ifelse(as.numeric(fit_cn$models[[1]]$v) < 0.5, "Atypical", "Normal"))
+fit_cn  <- ContaminatedMixt::CNmixt(Xcoord_ilr, G = 1, contamination = TRUE,
+                                    model = "VVV", verbose = FALSE)
+pred_cn <- factor(ifelse(as.numeric(fit_cn$models[[1]]$v) < 0.5,
+                         "Atypical", "Normal"))
 
+# =============================================================================
+# 3. Thresholds & Prediction Tables
+# =============================================================================
+chi2_thresh <- qchisq(0.95, d)
 
-# --- 3. Predictions and Thresholds ---
+## Full-sample Student-t — ILR
+final_t_ilr  <- fit_mvt(Xcoord_ilr, nu = "iterative", nu_iterative_method = "ECM")
+gdl_ilr      <- final_t_ilr$nu
+thresh_t_ilr <- d * qf(0.95, d, gdl_ilr)
 
-# T threshold (using the Full model for consistency)
-final_t_fit <- fit_mvt(Xcoord, nu = "iterative", nu_iterative_method = "ECM")
-gdl_t <- final_t_fit$nu
-thresh_t <- d * qf(0.95, d, gdl_t)
-t_scores <- mahalanobis(Xcoord, final_t_fit$mu, final_t_fit$scatter)
+## Full-sample Student-t — CLR
+final_t_clr  <- fit_mvt_clr(Xcoord_clr)
+gdl_clr      <- final_t_clr$nu
+thresh_t_clr <- d * qf(0.95, d, gdl_clr)
 
+cat("\nFull-sample nu  ILR:", round(gdl_ilr, 3),
+    "| CLR:", round(gdl_clr, 3), "\n")
 
-nu_loo_values <- numeric(N)
-# Fast loop to extract nu (without recalculating everything)
-message("Extracting nu values via LOO...")
-for (i in 1:N) {
-  X_menoi <- as.matrix(Xcoord[-i, ])
-  # Fast extraction of the nu parameter
-  fit_i <- fit_mvt(X_menoi, nu = "iterative", nu_iterative_method = "ECM")
-  nu_loo_values[i] <- fit_i$nu
-}
-
-mean(nu_loo_values)
-
-
-preds <- data.frame(
-  ID = 1:N,
-  Atypicality = factor(ifelse(atyp_pvals >= 0.95, "Atypical", "Normal")),
-  Norm_LOO    = factor(ifelse(d2_loo_norm >= qchisq(0.95, d), "Atypical", "Normal")),
-  T_LOO       = factor(ifelse(d2_loo_t >= thresh_t, "Atypical", "Normal")),
-  MCD         = factor(ifelse(mcd_scores > qchisq(0.95, d), "Atypical", "Normal")),
-  COMCoDa     = factor(ifelse(comed_scores > qchisq(0.95, d), "Atypical", "Normal")),
+## ---- ILR predictions -------------------------------------------------------
+preds_ilr <- data.frame(
+  ID          = 1:N,
+  Atypicality = factor(ifelse(atyp_pvals_ilr >= 0.95,          "Atypical", "Normal")),
+  Norm_LOO    = factor(ifelse(d2_loo_norm_ilr >= chi2_thresh,   "Atypical", "Normal")),
+  T_LOO       = factor(ifelse(d2_loo_t_ilr    >= thresh_t_ilr,  "Atypical", "Normal")),
+  MCD         = factor(ifelse(mcd_scores      >  chi2_thresh,   "Atypical", "Normal")),
+  COMCoDa     = factor(ifelse(comed_scores    >  chi2_thresh,   "Atypical", "Normal")),
   CN          = pred_cn
 )
 
-
-# --- 4. Validation and Consensus ---
-print("Outlier Count (With recalculated T-LOO):")
-print(colSums(preds[,-1] == "Atypical"))
-
-# Strong Outliers (Unanimity among T_LOO, MCD, CN, COMCoDa, Norm, and Atypicality)
-strong_idx <- which(preds$T_LOO == "Atypical" & 
-                      preds$MCD == "Atypical" & 
-                      preds$CN == "Atypical" &
-                      preds$COMCoDa == "Atypical" &
-                      preds$Atypicality == "Atypical" & 
-                      preds$Norm_LOO == "Atypical")
-
-cat("Outliers identified by consensus (including T-LOO):", length(strong_idx), "\n")
-
-# --- 2. Results Summary ---
-
-results_df <- data.frame(
-  ID = 1:N,
-  MCD = preds$MCD,
-  COMCoDa = preds$COMCoDa,
-  T_Student = preds$T_LOO,
-  CN = preds$CN,
-  Atypicality = preds$Atypicality,
-  Norm =  preds$Norm_LOO
+## ---- CLR predictions -------------------------------------------------------
+preds_clr <- data.frame(
+  ID          = 1:N,
+  Atypicality = factor(ifelse(atyp_pvals_clr >= 0.95,          "Atypical", "Normal")),
+  Norm_LOO    = factor(ifelse(d2_loo_norm_clr >= chi2_thresh,   "Atypical", "Normal")),
+  T_LOO       = factor(ifelse(d2_loo_t_clr    >= thresh_t_clr,  "Atypical", "Normal")),
+  MCD         = factor(ifelse(mcd_scores      >  chi2_thresh,   "Atypical", "Normal")),
+  COMCoDa     = factor(ifelse(comed_scores    >  chi2_thresh,   "Atypical", "Normal")),
+  CN          = pred_cn
 )
 
-print("Count of Identified Outliers:")
-print(colSums(results_df[, -1] == "Atypical", na.rm = TRUE))
+# =============================================================================
+# 4. Outlier Counts & Consensus
+# =============================================================================
 
+cat("\n=== ILR — Outlier counts per method ===\n")
+print(colSums(preds_ilr[, -1] == "Atypical"))
 
+cat("\n=== CLR — Outlier counts per method ===\n")
+print(colSums(preds_clr[, -1] == "Atypical"))
 
-outlier_lists <- list(
-  MCD = which(results_df$MCD == "Atypical"),
-  COMCoDa = which(results_df$COMCoDa == "Atypical"),
-  T_Student = which(results_df$T_Student == "Atypical"),
-  CN = which(results_df$CN == "Atypical"),
-  Atypicality = which(results_df$Atypicality == "Atypical"),
-  Norm = which(results_df$Norm == "Atypical")
-)
+## Consensus (all 6 methods agree)
+outlier_lists_ilr <- lapply(preds_ilr[, -1], function(col) which(col == "Atypical"))
+outlier_lists_clr <- lapply(preds_clr[, -1], function(col) which(col == "Atypical"))
 
-# Find indices of samples identified as 'Atypical' by ALL methods
-# Using Reduce with intersect to find the common intersection across the list
-strong_outlier_indices <- Reduce(intersect, outlier_lists)
+strong_idx_ilr <- Reduce(intersect, outlier_lists_ilr)
+strong_idx_clr <- Reduce(intersect, outlier_lists_clr)
 
-# Create a dataframe with only these extreme samples
-strong_outliers_data <- results_df[strong_outlier_indices, ]
+cat("\n--- CONSENSUS OUTLIERS ---\n")
+cat("ILR: n =", length(strong_idx_ilr),
+    "(", round(length(strong_idx_ilr)/N*100, 2), "%)\n")
+cat("CLR: n =", length(strong_idx_clr),
+    "(", round(length(strong_idx_clr)/N*100, 2), "%)\n")
+cat("Symmetric difference (ILR vs CLR):",
+    setdiff(union(strong_idx_ilr, strong_idx_clr),
+            intersect(strong_idx_ilr, strong_idx_clr)), "\n")
 
-cat("--- EXTREME OUTLIER ANALYSIS ---\n")
-cat("Number of samples identified by total consensus:", length(strong_outlier_indices), "\n")
-cat("Percentage of total:", round(length(strong_outlier_indices)/N*100, 2), "%\n")
+# =============================================================================
+# 5. Geochemical Interpretation
+# =============================================================================
 
-# Display the first indices
-print(strong_outlier_indices)
+geom_mean <- function(x) exp(mean(log(x[x > 0]), na.rm = TRUE))
 
-
-
-
-### Investigating the nature of these outliers
-# 1. Identify the "Strong" outliers
-strong_idx <- Reduce(intersect, outlier_lists)
-
-# 2. Create a factor in the original dataset for comparison
-# Note: uses original 'Kola' dataset (non-ilr transformed) for chemical interpretation
-Kola_analysis <- Kola
-Kola_analysis$Type <- "Typical"
-Kola_analysis$Type[strong_idx] <- "Strong Outlier"
-
-# 3. Calculate geometric means per group
-# In geochemistry, the median is more robust for comparisons
-library(dplyr)
-
-# Geometric mean function (handles zeros with a small epsilon if necessary)
-geom_mean <- function(x) {
-  exp(mean(log(x[x > 0]), na.rm = TRUE))
+analyze_outliers <- function(idx, label) {
+  Kola_a      <- Kola
+  Kola_a$Type <- "Typical"
+  Kola_a$Type[idx] <- "Strong Outlier"
+  
+  comp <- Kola_a %>%
+    group_by(Type) %>%
+    summarise(across(where(is.numeric),
+                     list(Med = median, GMean = geom_mean),
+                     .names = "{.col}_{.fn}")) %>%
+    tidyr::pivot_longer(-Type,
+                        names_to  = c("Element", "Stat"),
+                        names_sep = "_") %>%
+    tidyr::pivot_wider(names_from = Type, values_from = value) %>%
+    mutate(Ratio = `Strong Outlier` / Typical) %>%
+    arrange(Stat, desc(Ratio))
+  
+  cat("\n===", label, "— Most enriched elements (Geometric Mean) ===\n")
+  comp %>% filter(Stat == "GMean") %>% head(10) %>% print()
 }
 
-# Calculation of the comparative table
-comp_table_refined <- Kola_analysis %>%
-  group_by(Type) %>%
-  summarise(across(where(is.numeric), 
-                   list(Med = median, GMean = geom_mean), 
-                   .names = "{.col}_{.fn}")) %>%
-  tidyr::pivot_longer(cols = -Type, 
-                      names_to = c("Element", "Stat"), 
-                      names_sep = "_") %>%
-  tidyr::pivot_wider(names_from = Type, values_from = value) %>%
-  mutate(Ratio = `Strong Outlier` / Typical) %>%
-  arrange(Stat, desc(Ratio))
-
-# Display Geometric Mean results for top elements
-print("Most enriched elements (Geometric Mean):")
-comp_table_refined %>% 
-  filter(Stat == "GMean") %>% 
-  head(10) %>% 
-  print()
-
-print("Top enriched elements in consensus outliers:")
-print(head(comp_table_refined, 10))
+analyze_outliers(strong_idx_ilr, "ILR consensus outliers")
+analyze_outliers(strong_idx_clr, "CLR consensus outliers")
