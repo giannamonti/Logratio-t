@@ -14,7 +14,8 @@ The analysis focuses on:
 * **Leave-One-Out (LOO) diagnostics** and Atypicality Index calculation.
 * **Comparative analysis** with other robust methods (MCD, COMCoDa, Contaminated Normal).
 * **Geochemical interpretation** of consensus outliers (Kola Project dataset).
-* **Equivalence of logratio transformations** (CLR, ILR, ALR): all three yield numerically identical Mahalanobis distances and outlier classifications (max difference < 5×10$^{-14}$).
+* **Equivalence of logratio transformations** (CLR, ILR, ALR): all three yield numerically identical Mahalanobis distances and outlier classifications (max difference 
+$< 5\times 10^{-14}$).
 * **Simulation study** assessing the performance of each method across different sample sizes, dimensions, and contamination levels.
 
 ## 🛠 Required Packages
