@@ -146,7 +146,7 @@ message("  nu (Student-t, Kola): ", round(env_t_kola$nu, 3))
 # Figure: 2x2 envelope plot
 # =============================================================================
 
-pdf("Figure_Envelope.pdf", height = 8, width = 8)
+# pdf("Figure_Envelope.pdf", height = 8, width = 8)
 par(mfrow = c(2, 2),
     mar   = c(3.5, 3.5, 2, 0.5),
     mgp   = c(2, 0.5, 0),
@@ -172,4 +172,4 @@ draw_envelope(env_t_kola,
               title = bquote("Kola" ~ "-" ~ "Student-t" ~ 
                                (hat(nu) == .(round(env_t_kola$nu, 1)))),
               xmax = 150)
-dev.off()
+# dev.off()

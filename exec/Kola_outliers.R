@@ -32,6 +32,12 @@ dim(Kola)
 # Robust methods (MCD, COMCoDa, CN): fitted on ILR (full-rank input required
 #   by the underlying algorithms); distances are transform-invariant so results
 #   apply equally to CLR and ALR.
+
+# Note: ALR is not run separately in this analysis.
+# By the transform-invariance of Mahalanobis distances,
+# ALR yields identical outlier classifications to ILR and CLR.
+# This is confirmed theoretically (Section 3) and empirically
+# for the ILR/CLR comparison above (symmetric difference = 0).
 # =============================================================================
 
 # --- Transformations ---------------------------------------------------------
