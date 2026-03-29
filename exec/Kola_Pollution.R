@@ -176,7 +176,7 @@ col_norm  <- 2
 col_t_ilr <- 4
 col_t_clr <- "seagreen4"
 
-# pdf("Figure3_Kola.pdf", height = 8, width = 8)
+pdf("Figure3_Kola.pdf", height = 8, width = 8)
 par(mfrow = c(2, 2),
     mar   = c(2.5, 2.5, 1.8, 0.5),
     mgp   = c(1.4, 0.4, 0),
@@ -231,7 +231,7 @@ lines(ellipse_99_clr$x,      ellipse_99_clr$y,      col = col_norm,  lwd = 1.8)
 lines(ellipse_50_t_clr[, 1], ellipse_50_t_clr[, 2], col = col_t_clr, lwd = 1.8)
 lines(ellipse_95_t_clr[, 1], ellipse_95_t_clr[, 2], col = col_t_clr, lwd = 1.8)
 lines(ellipse_99_t_clr[, 1], ellipse_99_t_clr[, 2], col = col_t_clr, lwd = 1.8)
-# dev.off()
+dev.off()
 
 
 ###############################################################
@@ -321,10 +321,29 @@ ellipse_99_t_pca <- confidence_ellipse_GM(scores_pca, x = x, y = y, conf_level =
 ellipse_95_t_pca <- confidence_ellipse_GM(scores_pca, x = x, y = y, conf_level = 0.95, gdl = gdl_pca)
 ellipse_50_t_pca <- confidence_ellipse_GM(scores_pca, x = x, y = y, conf_level = 0.50, gdl = gdl_pca)
 
-# pdf("Figure4_Kola_biplot_clear.pdf", height = 7, width = 7)
-par(pty = "s", mar = c(5, 5, 4, 4))
-plot(scores_pca, cex = .5, col = "grey60", pch = 19,
-     xlim = c(-12, 12), ylim = c(-12, 12),
+#pdf("Figure4_Kola_biplot_clear.pdf", height = 7, width = 7)
+
+all_x <- c(scores_pca$x, 
+           ellipse_99_pca$x, ellipse_99_t_pca[, 1],
+           pca$rotation[, 1] * label_factor)
+all_y <- c(scores_pca$y, 
+           ellipse_99_pca$y, ellipse_99_t_pca[, 2],
+           pca$rotation[, 2] * label_factor)
+
+pad   <- 0.5
+xlim  <- range(all_x, na.rm = TRUE) + c(-pad, pad)
+ylim  <- range(all_y, na.rm = TRUE) + c(-pad, pad)
+
+
+rng  <- max(diff(xlim), diff(ylim)) / 2
+mid_x <- mean(xlim); mid_y <- mean(ylim)
+xlim <- c(mid_x - rng, mid_x + rng)
+ylim <- c(mid_y - rng, mid_y + rng)
+
+par(mar = c(4, 4, 1, 1))
+
+plot(scores_pca, cex = 0.5, col = "grey60", pch = 19,
+     xlim = xlim, ylim = ylim,
      xlab = "Dimension 1", ylab = "Dimension 2")
 lines(ellipse_50_pca$x,      ellipse_50_pca$y,      col = 2, lwd = 2)
 lines(ellipse_95_pca$x,      ellipse_95_pca$y,      col = 2, lwd = 2)
@@ -343,3 +362,12 @@ text(pca$rotation[, 1] * label_factor,
      labels = rownames(pca$rotation),
      col = "darkred", cex = 0.9, font = 2)
 # dev.off()
+
+
+
+
+
+
+
+
+
