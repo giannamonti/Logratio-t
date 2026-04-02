@@ -14,21 +14,11 @@ The analysis focuses on:
 * **Leave-One-Out (LOO) diagnostics** and Atypicality Index calculation.
 * **Comparative analysis** with other robust methods (MCD, COMCoDa, Contaminated Normal).
 * **Geochemical interpretation** of consensus outliers (Kola Project dataset).
-* **Equivalence of logratio transformations** (clr, ilr, alr): all three yield numerically identical Mahalanobis distances and outlier classifications (max difference 
-$< 5\times 10^{-14}$).
+* **Equivalence of logratio transformations** (clr, ilr, alr): all three yield numerically identical Mahalanobis distances and outlier classifications (max difference $< 5×10^{-14}$). The clr is handled directly via the Moore-Penrose pseudoinverse and pseudo-determinant, without requiring any change of basis.
 * **Simulation study** assessing the performance of each method across different sample sizes, dimensions, and contamination levels.
+* **Envelope goodness-of-fit analysis** confirming the superior fit of the logratio t over the logratio normal.
 
 ## 🛠 Required Packages
-
-The scripts require the following R libraries:
-
-* **Compositional Data:** `compositions`, `robCompositions`
-* **Robust Statistics:** `robustbase`, `fitHeavyTail`, `MASS`, `ContaminatedMixt`
-* **Diagnostics & Plotting:** `caret`, `pROC`, `ggplot2`, `patchwork`, `ggVennDiagram`
-* **Utilities:** `dplyr`, `tidyr`, `tictoc`, `Surrogate`, `mnormt`, `mvtnorm`, `Rfast`, `ConfidenceEllipse`
-* **Dataset:** `StatDA`
-
-You can install all dependencies with:
 
 ```r
 install.packages(c(
@@ -43,21 +33,45 @@ install.packages(c(
 ## 📂 Repository Structure
 
 ```
-* `exec/utils.R`: Helper functions for confidence ellipses in ternary and coordinate plots.
-* `exec/fit_mvt_clr.R`: **Core function.** Implements generalized Student-t fitting for singular clr inputs using Moore-Penrose pseudoinverse.
-* `exec/Kola_Pollution.R`: Analysis of the Co-Cu-Ni subset and full 12-part Kola dataset; generates Figures 3 and 4.
-* `exec/Kola_outliers.R`: Full-scale outlier detection, consensus analysis, and geochemical interpretation.
-* `exec/simulations.R`: Monte Carlo study comparing robust methods across various contamination scenarios.
+exec/
+├── utils.R            Helper functions: confidence_ellipse_GM() for
+│                      Student-t ellipses in coordinate and ternary plots.
+│
+├── fit_mvt_clr.R      Generalised Student-t fitting for singular clr input.
+│                      Implements fit_mvt_clr(), dmt_clr(), maha_clr(),
+│                      pseudo_log_det(), eff_rank() using Moore-Penrose
+│                      pseudoinverse and pseudo-log-determinant.
+│
+├── Kola_Pollution.R   Section 1: Co-Cu-Ni subset (D=3) and Section 2:
+│                      full 12-part Kola composition. Fits Normal and
+│                      Student-t models for clr, ilr and alr. Generates
+│                      Figure 3 (2×2 ternary and coordinate plots) and
+│                      Figure 4 (clr-PCA biplot). Includes rotation check
+│                      confirming clr SVD projection = ilr in data-driven basis.
+│
+├── Kola_outliers.R    Full-scale outlier detection on the 12-part Kola dataset.
+│                      LOO distances and Atypicality Index for clr and ilr.
+│                      Robust methods: MCD, COMCoDa, Contaminated Normal.
+│                      Consensus outlier set (42 observations, symmetric
+│                      difference clr vs ilr = ∅). Geochemical interpretation.
+│
+├── envelope_plot.R    Simulation-based envelope analysis (B=999 replications)
+│                      for logratio Normal and Student-t goodness of fit.
+│                      Generates Figure 5 (2×2 layout, Pollution and Kola).
+│
+└── simulations.R      Monte Carlo study (100 replications).
+                       Scenarios: n ∈ {100,1000}, D ∈ {3,5},
+                       contamination ∈ {10%,40%}. Methods compared:
+                       T_LOO, N_LOO, Atypicality, MCD, COMCoDa, CN.
+                       Metrics: AUC, Sensitivity, Specificity, PPV, NPV.
 ```
 
-## 🔑 Key Result: Equivalence of Logratio Transformations
-
-A central finding is that CLR, ILR, and ALR are **numerically equivalent** for distribution fitting and outlier detection. Using our generalized `fit_mvt_clr()` function:
-
-* **Mahalanobis Distances:** Max difference $|ilr - clr| < 5 \times 10^{-14}$ (floating-point noise).
-* **Outlier Classification:** Symmetric difference between ilr and clr sets is $\emptyset$ (perfect identity).
-* **Unified Framework:** The model handles singular (clr) and non-singular (ilr/alr) matrices interchangeably.
 
 ## 🚀 Quick Start
-1. Install dependencies using the script in the "Required Packages" section.
-2. Run `exec/Kola_Pollution.R` to reproduce the main figures and verification tests.
+
+```r
+source("exec/fit_mvt_clr.R")   # load generalised fitting functions
+source("exec/Kola_Pollution.R") # reproduce Figures 3 and 4
+source("exec/Kola_outliers.R")  # reproduce outlier analysis and Table 4
+source("exec/envelope_plot.R")  # reproduce Figure 5
+```
