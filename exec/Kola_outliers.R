@@ -22,25 +22,13 @@ Kola <- chorizon[, c("Co", "Cu", "Ni", "Mg", "Na", "S",
 dim(Kola)
 
 # =============================================================================
-# DEMOCRATIC APPROACH: CLR, ILR and ALR are mathematically equivalent.
-# Mahalanobis distances and outlier classifications are identical across
-# transformations (max diff < 5e-14). Both CLR and ILR are run in parallel
-# to demonstrate this equivalence empirically.
-#
-# CLR: handled via fit_mvt_clr() / maha_clr() / ginv() — no projection needed.
-# ILR: standard fit_mvt() / mahalanobis() — full-rank (D-1) coordinates.
-# Robust methods (MCD, COMCoDa, CN): fitted on ILR (full-rank input required
-#   by the underlying algorithms); distances are transform-invariant so results
-#   apply equally to CLR and ALR.
-
-# Note: ALR is not run separately in this analysis.
-# By the transform-invariance of Mahalanobis distances,
-# ALR yields identical outlier classifications to ILR and CLR.
-# This is confirmed theoretically (Section 3) and empirically
-# for the ILR/CLR comparison above (symmetric difference = 0).
+# CLR and ILR are run in parallel to demonstrate numerical equivalence.
+# Mahalanobis distances differ by < 5e-14; consensus outlier sets are identical
+# (symmetric difference = 0). ALR is not run separately — by transform-
+# invariance it yields identical results (see Section 3 of the paper).
+# MCD, COMCoDa and CN require full-rank input and are fitted on ILR.
 # =============================================================================
 
-# --- Transformations ---------------------------------------------------------
 Xcoord_ilr <- as.matrix(ilr(Kola))    # N x (D-1), full rank
 Xcoord_clr <- as.matrix(clr(Kola))    # N x D,     rank D-1
 
@@ -73,7 +61,6 @@ for (i in 1:N) {
   X_train_ilr <- as.matrix(Xcoord_ilr[-i, ])
   z_ilr        <- as.matrix(Xcoord_ilr[i, , drop = FALSE])
   
-  # Normal LOO
   fit_n_ilr  <- mvnorm.mle(X_train_ilr)
   mu_n_ilr   <- fit_n_ilr$mu
   sig_n_ilr  <- fit_n_ilr$sigma
@@ -82,7 +69,6 @@ for (i in 1:N) {
   atyp_pvals_ilr[i]  <- pbeta(qy_ilr / (qy_ilr + n_df), d/2, (n_df - d + 1)/2)
   d2_loo_norm_ilr[i] <- mahalanobis(z_ilr, mu_n_ilr, sig_n_ilr)
   
-  # Student-t LOO
   fit_t_ilr       <- fit_mvt(X_train_ilr, nu = "iterative", nu_iterative_method = "ECM")
   d2_loo_t_ilr[i] <- mahalanobis(z_ilr, fit_t_ilr$mu, fit_t_ilr$scatter)
   nu_loo_ilr[i]   <- fit_t_ilr$nu
@@ -91,7 +77,6 @@ for (i in 1:N) {
   X_train_clr <- Xcoord_clr[-i, ]
   z_clr        <- matrix(Xcoord_clr[i, ], nrow = 1)
   
-  # Normal LOO (ginv handles singular covariance directly)
   mu_n_clr   <- colMeans(X_train_clr)
   sig_n_clr  <- cov(X_train_clr)
   Sinv_n_clr <- ginv(sig_n_clr)
@@ -100,7 +85,6 @@ for (i in 1:N) {
   atyp_pvals_clr[i]  <- pbeta(qy_clr / (qy_clr + n_df), d/2, (n_df - d + 1)/2)
   d2_loo_norm_clr[i] <- maha_clr(z_clr, mu_n_clr, Sinv_n_clr)
   
-  # Student-t LOO (fit_mvt_clr works directly on singular CLR matrix)
   fit_t_clr       <- fit_mvt_clr(X_train_clr)
   Sinv_t_clr      <- ginv(fit_t_clr$scatter)
   d2_loo_t_clr[i] <- maha_clr(z_clr, fit_t_clr$mu, Sinv_t_clr)
@@ -112,7 +96,6 @@ for (i in 1:N) {
 cat("\nMean nu (LOO) ILR:", round(mean(nu_loo_ilr), 3), "\n")
 cat("Mean nu (LOO) CLR:", round(mean(nu_loo_clr), 3), "\n")
 
-# Equivalence check
 cat("\nEquivalence check (Normal LOO distances):\n")
 cat("  Max |ILR - CLR|:", max(abs(d2_loo_norm_ilr - d2_loo_norm_clr)), "\n")
 cat("Equivalence check (Student-t LOO distances):\n")
@@ -121,9 +104,6 @@ cat("  Max |ILR - CLR|:", max(abs(d2_loo_t_ilr - d2_loo_t_clr)), "\n")
 # =============================================================================
 # 2. Robust Methods (Full Sample)
 # =============================================================================
-# MCD, COMCoDa and CN require full-rank input — fitted on ILR coordinates.
-# Transform-invariance of Mahalanobis distances guarantees identical results
-# for CLR and ALR.
 
 mcd_res    <- covMcd(Xcoord_ilr)
 mcd_scores <- mcd_res$mah
@@ -141,12 +121,10 @@ pred_cn <- factor(ifelse(as.numeric(fit_cn$models[[1]]$v) < 0.5,
 # =============================================================================
 chi2_thresh <- qchisq(0.95, d)
 
-## Full-sample Student-t — ILR
 final_t_ilr  <- fit_mvt(Xcoord_ilr, nu = "iterative", nu_iterative_method = "ECM")
 gdl_ilr      <- final_t_ilr$nu
 thresh_t_ilr <- d * qf(0.95, d, gdl_ilr)
 
-## Full-sample Student-t — CLR
 final_t_clr  <- fit_mvt_clr(Xcoord_clr)
 gdl_clr      <- final_t_clr$nu
 thresh_t_clr <- d * qf(0.95, d, gdl_clr)
@@ -154,25 +132,23 @@ thresh_t_clr <- d * qf(0.95, d, gdl_clr)
 cat("\nFull-sample nu  ILR:", round(gdl_ilr, 3),
     "| CLR:", round(gdl_clr, 3), "\n")
 
-## ---- ILR predictions -------------------------------------------------------
 preds_ilr <- data.frame(
   ID          = 1:N,
-  Atypicality = factor(ifelse(atyp_pvals_ilr >= 0.95,          "Atypical", "Normal")),
-  Norm_LOO    = factor(ifelse(d2_loo_norm_ilr >= chi2_thresh,   "Atypical", "Normal")),
-  T_LOO       = factor(ifelse(d2_loo_t_ilr    >= thresh_t_ilr,  "Atypical", "Normal")),
-  MCD         = factor(ifelse(mcd_scores      >  chi2_thresh,   "Atypical", "Normal")),
-  COMCoDa     = factor(ifelse(comed_scores    >  chi2_thresh,   "Atypical", "Normal")),
+  Atypicality = factor(ifelse(atyp_pvals_ilr >= 0.95,         "Atypical", "Normal")),
+  Norm_LOO    = factor(ifelse(d2_loo_norm_ilr >= chi2_thresh,  "Atypical", "Normal")),
+  T_LOO       = factor(ifelse(d2_loo_t_ilr    >= thresh_t_ilr, "Atypical", "Normal")),
+  MCD         = factor(ifelse(mcd_scores      >  chi2_thresh,  "Atypical", "Normal")),
+  COMCoDa     = factor(ifelse(comed_scores    >  chi2_thresh,  "Atypical", "Normal")),
   CN          = pred_cn
 )
 
-## ---- CLR predictions -------------------------------------------------------
 preds_clr <- data.frame(
   ID          = 1:N,
-  Atypicality = factor(ifelse(atyp_pvals_clr >= 0.95,          "Atypical", "Normal")),
-  Norm_LOO    = factor(ifelse(d2_loo_norm_clr >= chi2_thresh,   "Atypical", "Normal")),
-  T_LOO       = factor(ifelse(d2_loo_t_clr    >= thresh_t_clr,  "Atypical", "Normal")),
-  MCD         = factor(ifelse(mcd_scores      >  chi2_thresh,   "Atypical", "Normal")),
-  COMCoDa     = factor(ifelse(comed_scores    >  chi2_thresh,   "Atypical", "Normal")),
+  Atypicality = factor(ifelse(atyp_pvals_clr >= 0.95,         "Atypical", "Normal")),
+  Norm_LOO    = factor(ifelse(d2_loo_norm_clr >= chi2_thresh,  "Atypical", "Normal")),
+  T_LOO       = factor(ifelse(d2_loo_t_clr    >= thresh_t_clr, "Atypical", "Normal")),
+  MCD         = factor(ifelse(mcd_scores      >  chi2_thresh,  "Atypical", "Normal")),
+  COMCoDa     = factor(ifelse(comed_scores    >  chi2_thresh,  "Atypical", "Normal")),
   CN          = pred_cn
 )
 
@@ -186,7 +162,6 @@ print(colSums(preds_ilr[, -1] == "Atypical"))
 cat("\n=== CLR — Outlier counts per method ===\n")
 print(colSums(preds_clr[, -1] == "Atypical"))
 
-## Consensus (all 6 methods agree)
 outlier_lists_ilr <- lapply(preds_ilr[, -1], function(col) which(col == "Atypical"))
 outlier_lists_clr <- lapply(preds_clr[, -1], function(col) which(col == "Atypical"))
 

@@ -111,7 +111,7 @@ draw_envelope <- function(env, title = "",
        pch = 19, cex = 0.4, col = col_pts,
        xlim = xlim, ylim = ylim,
        xlab = "Theoretical quantiles",
-       ylab = expression(Mahalanobis ~ d^2),
+       ylab = expression(D[M]^2),
        main = title)
   polygon(c(q_th, rev(q_th)),
           c(env_lo, rev(env_up)),

@@ -14,10 +14,6 @@
 #   - Same nu bounds via getOption("nu_min"), getOption("nu_max")
 #   - Same convergence tolerance ptol = 1e-3
 #
-# Key result (reviewer's claim, verified numerically):
-#   Mahalanobis distances are IDENTICAL across ILR, ALR, CLR (diff < 1e-13).
-#   AIC and nu may differ slightly due to iterative ECM trajectories, but
-#   both converge to the same theoretical maximum of the likelihood.
 # =============================================================================
 
 library(MASS)   # ginv()
